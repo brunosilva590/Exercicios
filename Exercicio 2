@@ -1,0 +1,17 @@
+O programa começa com numero = 0, ou seja, o valor inicial é 0. Depois, entra em um loop while True que continua indefinidamente, mas vamos ver o que acontece passo a passo:
+
+numero += 1 aumenta o valor de numero em 1 a cada iteração.
+Se numero == 3, o comando continue faz o loop pular para a próxima iteração, sem executar o resto do código dentro do loop.
+Se numero > 5, o comando break encerra o loop.
+Por fim, print(numero) mostra o valor de numero a cada iteração, exceto quando continue é executado.
+
+Vamos simular:
+
+Iteração 1: numero = 1, imprime 1.
+Iteração 2: numero = 2, imprime 2.
+Iteração 3: numero = 3, continue pula, não imprime.
+Iteração 4: numero = 4, imprime 4.
+Iteração 5: numero = 5, imprime 5.
+Iteração 6: numero = 6, break encerra o loop.
+
+Resultado: O programa imprime 1 2 4 5.
