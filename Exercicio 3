@@ -1,1 +1,30 @@
-qw
+import random
+
+# Lista de palavras reais em português (dicionário interno)
+dicionario = [
+    "sol", "lua", "rio", "mar", "ceu", "nuvem", "estrela", "flor", "arvore", "pedra",
+    "livro", "mesa", "cadeira", "janela", "porta", "carro", "bicicleta", "cidade",
+    "montanha", "praia", "floresta", "jardim", "tempo", "vida", "amor", "paz",
+    "felicidade", "caminho", "sonho", "noite", "dia", "chuva", "vento", "coração",
+    "luz", "sombra", "calor", "frio", "neve", "areia", "rio", "estrela", "nuvem",
+    "travesseiro", "caderno", "caneta", "papel", "teto", "chão", "parede", "rio"
+]
+
+# Gera uma lista com 7 palavras aleatórias do dicionário durante a execução
+palavras = random.sample(dicionario, 7)
+
+# Inicializa maior e menor palavra com a primeira da lista
+maior_palavra = palavras[0]
+menor_palavra = palavras[0]
+
+# Encontra a maior e a menor palavra
+for palavra in palavras:
+    if len(palavra) > len(maior_palavra):
+        maior_palavra = palavra
+    if len(palavra) < len(menor_palavra):
+        menor_palavra = palavra
+
+# Exibe os resultados
+print(f"Lista gerada: {palavras}")
+print(f"Maior palavra: '{maior_palavra}' ({len(maior_palavra)} caracteres)")
+print(f"Menor palavra: '{menor_palavra}' ({len(menor_palavra)} caracteres)")
