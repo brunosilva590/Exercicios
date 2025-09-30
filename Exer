@@ -1,0 +1,4 @@
+nome = input("Digite seu nome: ")
+idade = int(input("Digite sua idade: "))
+anos_para_100 = 100 - idade
+print(f"Olá, {nome}! Você tem {idade} anos e faltam {anos_para_100} anos para chegar aos 100.")
