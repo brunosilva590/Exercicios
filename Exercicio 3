@@ -28,3 +28,4 @@ for palavra in palavras:
 print(f"Lista gerada: {palavras}")
 print(f"Maior palavra: '{maior_palavra}' ({len(maior_palavra)} caracteres)")
 print(f"Menor palavra: '{menor_palavra}' ({len(menor_palavra)} caracteres)")
+
