@@ -1,1 +1,4 @@
-
+a = float(input("Digite o primeiro número (a): "))
+b = float(input("Digite o segundo número (b): "))
+x = (a + b) * 15
+print(f"A solução da equação x = (a + b) * 15 é: x = {x}")
