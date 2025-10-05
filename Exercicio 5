@@ -13,4 +13,4 @@ elif genero == "F":
     else:
         print(f"A {nome} é baixa.")
 else:
-    print("Gênero inválido. Por favor, use M para masculino ou F para feminino.")
+    print("Genero inválido. Por favor, use M para masculino ou F para feminino.")
