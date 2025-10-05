@@ -1,1 +1,37 @@
+def calculadora():
+    print("Calculadora Simples")
+    print("Operações disponíveis: +, -, *, /")
+    
+    while True:
+        try:
+            num1 = float(input("Digite o primeiro número: "))
+            operacao = input("Digite a operação (+, -, *, /): ")
+            num2 = float(input("Digite o segundo número: "))
+            
+            if operacao == "+":
+                resultado = num1 + num2
+                print(f"{num1} + {num2} = {resultado}")
+            elif operacao == "-":
+                resultado = num1 - num2
+                print(f"{num1} - {num2} = {resultado}")
+            elif operacao == "*":
+                resultado = num1 * num2
+                print(f"{num1} * {num2} = {resultado}")
+            elif operacao == "/":
+                if num2 == 0:
+                    print("Erro: Divisão por zero!")
+                else:
+                    resultado = num1 / num2
+                    print(f"{num1} / {num2} = {resultado}")
+            else:
+                print("Operação inválida! Use +, -, * ou /")
+            
+            continuar = input("Deseja continuar? (s/n): ").lower()
+            if continuar != "s":
+                print("Calculadora encerrada.")
+                break
+                
+        except ValueError:
+            print("Erro: Por favor, insira números válidos.")
 
+calculadora()
