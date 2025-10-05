@@ -1,1 +1,16 @@
+nome = input("Digite seu nome: ")
+altura = float(input("Digite sua altura em metros (ex: 1.75): "))
+genero = input("Digite seu gênero (M para masculino, F para feminino): ").upper()
 
+if genero == "M":
+    if altura > 1.74:
+        print(f"O {nome} é alto.")
+    else:
+        print(f"O {nome} é baixo.")
+elif genero == "F":
+    if altura > 1.64:
+        print(f"A {nome} é alta.")
+    else:
+        print(f"A {nome} é baixa.")
+else:
+    print("Gênero inválido. Por favor, use M para masculino ou F para feminino.")
