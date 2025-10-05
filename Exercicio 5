@@ -1,6 +1,6 @@
 nome = input("Digite seu nome: ")
 altura = float(input("Digite sua altura em metros (ex: 1.75): "))
-genero = input("Digite seu gênero (M para masculino, F para feminino): ").upper()
+genero = input("Digite seu genero (M para masculino, F para feminino): ").upper()
 
 if genero == "M":
     if altura > 1.74:
