@@ -1,1 +1,39 @@
+class Animal:
+    def __init__(self, nome, cor, peso):
+        self.nome = nome
+        self.cor = cor
+        self.peso = peso
 
+    def andar(self):
+        return f"{self.nome} está andando."
+
+    def correr(self):
+        return f"{self.nome} está correndo."
+
+class Gato(Animal):
+    def miar(self):
+        return f"{self.nome} está miando."
+
+class Cao(Animal):
+    def latir(self):
+        return f"{self.nome} está latindo."
+
+class Passaro(Animal):
+    def voar(self):
+        return f"{self.nome} está voando."
+
+    def cantar(self):
+        return f"{self.nome} está cantando."
+
+# Criando 3 exemplos (1 gato, 1 cão, 1 pássaro)
+gato1 = Gato("Felix", "Preto", "4kg")
+cao1 = Cao("Rex", "Marrom", "10kg")
+passaro1 = Passaro("Luna", "Branco", "0.5kg")
+
+# Executando 2 ações para cada animal
+print(gato1.andar())
+print(gato1.miar())
+print(cao1.andar())
+print(cao1.latir())
+print(passaro1.voar())
+print(passaro1.cantar())
