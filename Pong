@@ -1,0 +1,249 @@
+import pygame
+import random
+
+pygame.init()
+
+LARGURA, ALTURA = 800, 600
+tela = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption("Pong - 45° nas Bordas")
+
+PRETO = (0, 0, 0)
+BRANCO = (255, 255, 255)
+CINZA = (200, 200, 200)
+
+# Fontes
+fonte_title = pygame.font.SysFont(None, 90)
+fonte_menu = pygame.font.SysFont(None, 55)
+fonte_placar = pygame.font.SysFont(None, 80)
+
+# Raquetes
+LARG_RAQ = 15
+ALT_RAQ_BASE = 90
+raquete_esq = pygame.Rect(30, ALTURA//2 - ALT_RAQ_BASE//2, LARG_RAQ, ALT_RAQ_BASE)
+raquete_dir = pygame.Rect(LARGURA - 45, ALTURA//2 - ALT_RAQ_BASE//2, LARG_RAQ, ALT_RAQ_BASE)
+VEL_RAQ = 9
+
+# Bola
+TAM_BOLA = 16
+bolas = []  # [rect, vel_x, vel_y]
+
+# Power-up
+powerup = None
+powerup_tipo = None
+ultimo_powerup_tempo = 0
+COOLDOWN_POWERUP = 10000  # 10 segundos
+
+TIPOS_POWERUP = ["speed", "tamanho", "duplicar", "invisivel"]
+CORES_POWERUP = {
+    "speed": (255, 150, 0),
+    "tamanho": (0, 255, 0),
+    "duplicar": (0, 100, 255),
+    "invisivel": (150, 0, 255)
+}
+
+estado = "menu"
+modo = None
+dificuldade = None
+placar_esq = placar_dir = 0
+vel_base_atual = 4.5   # velocidade inicial
+aceleracao_por_ponto = 0.4
+
+bola_invisivel = False
+tempo_invisivel = 0
+DURACAO_INVISIVEL = 3000
+
+relogio = pygame.time.Clock()
+
+# Botões
+btn_1v1 = pygame.Rect(LARGURA//2 - 150, 200, 300, 70)
+btn_pvc = pygame.Rect(LARGURA//2 - 150, 290, 300, 70)
+btn_sair = pygame.Rect(LARGURA//2 - 150, 380, 300, 70)
+btn_facil = pygame.Rect(LARGURA//2 - 150, 200, 300, 70)
+btn_medio = pygame.Rect(LARGURA//2 - 150, 290, 300, 70)
+btn_dificil = pygame.Rect(LARGURA//2 - 150, 380, 300, 70)
+
+def nova_bola():
+    direcao = random.choice((-1, 1))
+    vel_x = direcao * vel_base_atual
+    vel_y = random.uniform(-vel_base_atual * 0.5, vel_base_atual * 0.5)  # começa quase horizontal
+    bola_rect = pygame.Rect(LARGURA//2 - TAM_BOLA//2, ALTURA//2 - TAM_BOLA//2, TAM_BOLA, TAM_BOLA)
+    bolas.append([bola_rect, vel_x, vel_y])
+
+def reset_jogo():
+    global bolas, vel_base_atual, placar_esq, placar_dir, powerup
+    bolas.clear()
+    nova_bola()
+    vel_base_atual = 4.5
+    placar_esq = placar_dir = 0
+    raquete_esq.height = raquete_dir.height = ALT_RAQ_BASE
+    raquete_esq.y = raquete_dir.y = ALTURA//2 - ALT_RAQ_BASE//2
+    powerup = None
+
+reset_jogo()
+
+rodando = True
+while rodando:
+    relogio.tick(60)
+    agora = pygame.time.get_ticks()
+    mouse_pos = pygame.mouse.get_pos()
+
+    for evento in pygame.event.get():
+        if evento.type == pygame.QUIT:
+            rodando = False
+        if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
+            estado = "menu"
+        if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+            if estado == "menu":
+                if btn_1v1.collidepoint(mouse_pos):
+                    modo, estado = "pvp", "jogo"
+                    reset_jogo()
+                elif btn_pvc.collidepoint(mouse_pos):
+                    estado = "dificuldade"
+                elif btn_sair.collidepoint(mouse_pos):
+                    rodando = False
+            elif estado == "dificuldade":
+                if btn_facil.collidepoint(mouse_pos):
+                    dificuldade, modo, estado = "facil", "pvc", "jogo"
+                    reset_jogo()
+                elif btn_medio.collidepoint(mouse_pos):
+                    dificuldade, modo, estado = "medio", "pvc", "jogo"
+                    reset_jogo()
+                elif btn_dificil.collidepoint(mouse_pos):
+                    dificuldade, modo, estado = "dificil", "pvc", "jogo"
+                    reset_jogo()
+
+    if estado != "jogo":
+        tela.fill(PRETO)
+        titulo = fonte_title.render("PONG" if estado == "menu" else "DIFICULDADE", True, BRANCO)
+        tela.blit(titulo, (LARGURA//2 - titulo.get_width()//2, 80))
+        botoes = [btn_1v1, btn_pvc, btn_sair] if estado == "menu" else [btn_facil, btn_medio, btn_dificil]
+        textos = ["1 vs 1", "1 vs CPU", "Sair"] if estado == "menu" else ["Fácil", "Médio", "Difícil"]
+        for btn, txt in zip(botoes, textos):
+            cor = CINZA if btn.collidepoint(mouse_pos) else BRANCO
+            pygame.draw.rect(tela, cor, btn, border_radius=15)
+            pygame.draw.rect(tela, PRETO, btn, 5, border_radius=15)
+            t = fonte_menu.render(txt, True, PRETO)
+            tela.blit(t, (btn.centerx - t.get_width()//2, btn.centery - t.get_height()//2))
+        pygame.display.flip()
+        continue
+
+    # Controles
+    teclas = pygame.key.get_pressed()
+    if teclas[pygame.K_w]: raquete_esq.y = max(0, raquete_esq.y - VEL_RAQ)
+    if teclas[pygame.K_s]: raquete_esq.y = min(ALTURA - raquete_esq.height, raquete_esq.y + VEL_RAQ)
+    if modo == "pvp":
+        if teclas[pygame.K_UP]: raquete_dir.y = max(0, raquete_dir.y - VEL_RAQ)
+        if teclas[pygame.K_DOWN]: raquete_dir.y = min(ALTURA - raquete_dir.height, raquete_dir.y + VEL_RAQ)
+    else:
+        alvo = ALTURA // 2
+        if bolas and bolas[0][1] > 0:
+            b = bolas[0]
+            dist = (raquete_dir.x - b[0].right) / max(1, b[1])
+            alvo = b[0].centery + b[2] * dist
+        alvo = max(raquete_dir.height//2, min(ALTURA - raquete_dir.height//2, alvo))
+        speed = 4 if dificuldade == "facil" else 8 if dificuldade == "medio" else 14
+        if raquete_dir.centery < alvo: raquete_dir.y += min(speed, alvo - raquete_dir.centery)
+        if raquete_dir.centery > alvo: raquete_dir.y -= min(speed, raquete_dir.centery - alvo)
+
+    # Power-up spawn
+    if pygame.time.get_ticks() - ultimo_powerup_tempo > COOLDOWN_POWERUP and powerup is None and random.random() < 0.02:
+        powerup_tipo = random.choice(TIPOS_POWERUP)
+        powerup = pygame.Rect(LARGURA//2 - 35, ALTURA//2 - 35, 70, 70)
+
+    # Movimento das bolas
+    for b in bolas[:]:
+        bola_rect, vx, vy = b[0], b[1], b[2]
+
+        # Passos pequenos (evita túnel)
+        passos = max(1, int(abs(vx) + abs(vy)))
+        dx = vx / passos
+        dy = vy / passos
+
+        for _ in range(passos):
+            bola_rect.x += dx
+            bola_rect.y += dy
+
+            # 45° EXATOS NAS BORDAS (É ISSO QUE QUERIAS!)
+            if bola_rect.top <= 0:
+                bola_rect.top = 0
+                vy = vel_base_atual * 1.1   # 45° para baixo
+            if bola_rect.bottom >= ALTURA:
+                bola_rect.bottom = ALTURA
+                vy = -vel_base_atual * 1.1  # 45° para cima
+
+            # Power-up
+            if powerup and bola_rect.colliderect(powerup):
+                if powerup_tipo == "speed":
+                    vel_base_atual = min(vel_base_atual * 1.9, 25)
+                elif powerup_tipo == "tamanho":
+                    nova_h = int(ALT_RAQ_BASE * 1.7)
+                    if vx < 0:
+                        raquete_esq.height = nova_h
+                        raquete_esq.y = max(0, raquete_esq.y - (nova_h - ALT_RAQ_BASE)//2)
+                    else:
+                        raquete_dir.height = nova_h
+                        raquete_dir.y = max(0, raquete_dir.y - (nova_h - ALT_RAQ_BASE)//2)
+                elif powerup_tipo == "duplicar":
+                    for _ in range(2):
+                        if len(bolas) < 6: nova_bola()
+                elif powerup_tipo == "invisivel":
+                    bola_invisivel = True
+                    tempo_invisivel = pygame.time.get_ticks()
+                ultimo_powerup_tempo = pygame.time.get_ticks()
+                powerup = None
+
+            # Raquetes
+            if bola_rect.colliderect(raquete_esq) and vx < 0:
+                offset = (bola_rect.centery - raquete_esq.centery) / (raquete_esq.height / 2)
+                vy = offset * 12
+                vx = abs(vx) + 0.4
+                bola_rect.x = raquete_esq.right
+            if bola_rect.colliderect(raquete_dir) and vx > 0:
+                offset = (bola_rect.centery - raquete_dir.centery) / (raquete_dir.height / 2)
+                vy = offset * 12
+                vx = -abs(vx) - 0.4
+                bola_rect.x = raquete_dir.left - TAM_BOLA
+
+        b[1], b[2] = vx, vy
+
+        # Pontuação
+        if bola_rect.left <= 0:
+            placar_dir += 1
+            vel_base_atual += aceleracao_por_ponto
+            bolas.remove(b)
+        if bola_rect.right >= LARGURA:
+            placar_esq += 1
+            vel_base_atual += aceleracao_por_ponto
+            bolas.remove(b)
+
+    if not bolas:
+        nova_bola()
+
+    if bola_invisivel and agora - tempo_invisivel > DURACAO_INVISIVEL:
+        bola_invisivel = False
+
+    # Desenho
+    tela.fill(PRETO)
+    for y in range(0, ALTURA, 20):
+        if y % 40 == 0:
+            pygame.draw.line(tela, BRANCO, (LARGURA//2, y), (LARGURA//2, y+10), 4)
+
+    if powerup:
+        pygame.draw.rect(tela, CORES_POWERUP[powerup_tipo], powerup, border_radius=20)
+        pygame.draw.rect(tela, BRANCO, powerup, 5, border_radius=20)
+
+    if not bola_invisivel:
+        for b in bolas:
+            pygame.draw.ellipse(tela, BRANCO, b[0])
+
+    pygame.draw.rect(tela, BRANCO, raquete_esq)
+    pygame.draw.rect(tela, BRANCO, raquete_dir)
+
+    esq_txt = fonte_placar.render(str(placar_esq), True, BRANCO)
+    dir_txt = fonte_placar.render(str(placar_dir), True, BRANCO)
+    tela.blit(esq_txt, (LARGURA//4, 20))
+    tela.blit(dir_txt, (3*LARGURA//4, 20))
+
+    pygame.display.flip()
+
+pygame.quit()
