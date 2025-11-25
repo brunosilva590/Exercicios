@@ -1,0 +1,325 @@
+import pygame
+import sys
+import random
+import time
+import math
+import os
+
+# === INICIALIZAÇÃO ===
+pygame.init()
+info = pygame.display.Info()
+LARGURA, ALTURA = info.current_w, info.current_h
+TELA = pygame.display.set_mode((LARGURA, ALTURA), pygame.FULLSCREEN)
+pygame.display.set_caption("JOGO DO GALO - BUCKSHOT EDITION")
+pygame.mouse.set_visible(False)
+
+# === SOM (opcional) ===
+som_clique = None
+try:
+    pygame.mixer.init()
+    if os.path.exists("click.wav"):
+        som_clique = pygame.mixer.Sound("click.wav")
+except:
+    pass
+
+# === 3D ENGINE ===
+FOV = 800
+CENTRO_X, CENTRO_Y = LARGURA // 2, ALTURA // 2
+CHAO_Y = ALTURA - 120
+
+class Cartucho3D:
+    def __init__(self):
+        self.reset()
+        self.ang_x = random.uniform(-1, 1)
+        self.ang_y = random.uniform(-1, 1)
+        self.ang_z = random.uniform(-1, 1)
+        self.vang_x = random.uniform(-0.03, 0.03)
+        self.vang_y = random.uniform(-0.04, 0.04)
+        self.vang_z = random.uniform(-0.02, 0.02)
+
+    def reset(self):
+        self.x = random.uniform(-500, 500)
+        self.y = random.uniform(-700, -300)
+        self.z = random.uniform(800, 1500)
+        self.vx = random.uniform(-1.5, 1.5)
+        self.vy = random.uniform(0.5, 2.0)
+        self.vz = random.uniform(-0.8, 0.8)
+        
+        # === VISUAL CLÁSSICO DE CARTUCHO DE SHOTGUN 12 GAUGE ===
+        self.corpo = (230, 30, 30)                    # Vermelho vivo clássico (ex: Remington, Fiocchi, Winchester)
+        self.base  = (220, 180, 70)                   # Dourado/latão realista
+        self.tamanho = random.uniform(32, 38)         # Tamanho perfeito de cartucho real
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.z += self.vz
+        self.vy += 0.06  # Gravidade
+
+        # Colisão com chão
+        if self.y > 250:
+            self.y = 250
+            self.vy *= -0.5
+            self.vx *= 0.7
+            self.vz *= 0.7
+            if abs(self.vy) < 0.3 and abs(self.vx) < 0.3 and abs(self.vz) < 0.3:
+                if time.time() - getattr(self, 'ultimo_reset', 0) > 2.0:
+                    self.reset()
+                    self.ultimo_reset = time.time()
+
+        # Rotação suave
+        self.ang_x += self.vang_x
+        self.ang_y += self.vang_y
+        self.ang_z += self.vang_z
+
+    def projetar(self, px, py, pz):
+        z = pz
+        if z <= 0: z = 0.1
+        escala = FOV / (FOV + z)
+        x2d = CENTRO_X + px * escala
+        y2d = CENTRO_Y + py * escala
+        return x2d, y2d, escala, z
+
+    def draw(self, surf):
+        h = self.tamanho * 2.8
+        r = self.tamanho * 0.45
+        sin_x, cos_x = math.sin(self.ang_x), math.cos(self.ang_x)
+        sin_y, cos_y = math.sin(self.ang_y), math.cos(self.ang_y)
+        sin_z, cos_z = math.sin(self.ang_z), math.cos(self.ang_z)
+
+        def rotacionar(x, y, z):
+            # Rot Z
+            x1 = x * cos_z - y * sin_z
+            y1 = x * sin_z + y * cos_z
+            # Rot Y
+            z1 = z * cos_y - x1 * sin_y
+            x2 = z * sin_y + x1 * cos_y
+            # Rot X
+            y2 = y1 * cos_x - z1 * sin_x
+            z2 = y1 * sin_x + z1 * cos_x
+            return x2, y2, z2
+
+        # 16 pontos (8 base + 8 topo)
+        pontos = []
+        for ang in range(0, 360, 45):
+            rad = math.radians(ang)
+            px = r * math.cos(rad)
+            py = r * math.sin(rad)
+            # Base inferior
+            vx, vy, vz = rotacionar(px, py, -h/2)
+            pontos.append((self.x + vx, self.y + vy, self.z + vz))
+            # Topo
+            vx, vy, vz = rotacionar(px, py, h/2)
+            pontos.append((self.x + vx, self.y + vy, self.z + vz))
+
+        # Projetar
+        proj = []
+        for x, y, z in pontos:
+            x2d, y2d, esc, depth = self.projetar(x, y, z)
+            proj.append((x2d, y2d, esc, depth))
+
+        # Ordenar por profundidade
+        proj.sort(key=lambda p: p[3], reverse=True)
+
+        # Desenhar laterais (quads)
+        for i in range(0, 16, 2):
+            p1 = proj[i]
+            p2 = proj[(i+1)%16]
+            p3 = proj[(i+17)%16]
+            p4 = proj[(i+16)%16]
+            pontos_2d = [(p1[0], p1[1]), (p2[0], p2[1]), (p3[0], p3[1]), (p4[0], p4[1])]
+            if p1[2] > 0.05:
+                pygame.draw.polygon(surf, self.corpo, pontos_2d)
+
+        # Base superior (topo do cartucho)
+        topo = proj[1::2]
+        if all(p[2] > 0.05 for p in topo):
+            pygame.draw.polygon(surf, self.base, [(p[0], p[1]) for p in topo])
+
+        # Sombra no chão
+        if self.y > 200:
+            sombra_alpha = max(0, 180 - int(self.z / 8))
+            if sombra_alpha > 0:
+                sombra = pygame.Surface((int(r*6*proj[0][2]), int(r*3*proj[0][2])), pygame.SRCALPHA)
+                sombra.fill((0,0,0,sombra_alpha))
+                rect = sombra.get_rect(center=(CENTRO_X + self.x * (FOV/(FOV+self.z)), CHAO_Y))
+                surf.blit(sombra, rect)
+
+# === CARTUCHOS (35, spawn lento) ===
+cartuchos = [Cartucho3D() for _ in range(35)]
+for c in cartuchos:
+    c.ultimo_reset = time.time()
+
+# === CRT SCANLINES ===
+def criar_scanlines():
+    s = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+    for y in range(0, ALTURA, 4):
+        pygame.draw.line(s, (0,0,0,28), (0,y), (LARGURA,y))
+    return s
+scanlines = criar_scanlines()
+
+# === FONTES ===
+FONTE_TITULO = pygame.font.SysFont("couriernew", min(135, LARGURA//9), bold=True)
+FONTE_SUB = pygame.font.SysFont("couriernew", min(36, LARGURA//36), bold=True)
+FONTE_MENU = pygame.font.SysFont("couriernew", min(55, LARGURA//24), bold=True)
+
+# === ESTADOS ===
+MENU, JOGO = 0, 1
+estado = MENU
+
+# === BOTÕES ===
+botoes = [
+    {"txt": "START",   "acao": lambda: mudar_estado(JOGO)},
+    {"txt": "OPTIONS", "acao": lambda: print("Opções")},
+    {"txt": "CREDITS", "acao": lambda: print("Créditos: Anali")},
+    {"txt": "EXIT",    "acao": sys.exit},
+]
+for i, b in enumerate(botoes):
+    r = pygame.Rect(0, ALTURA//2 + 140 + i*80, 380, 60)
+    r.centerx = LARGURA // 2
+    b["rect"] = r
+
+# === JOGO DO GALO ===
+tabuleiro = [[None]*3 for _ in range(3)]
+jogador = "X"
+acabou = False
+msg = ""
+
+def vitoria(j):
+    for i in range(3):
+        if all(tabuleiro[i][k] == j for k in range(3)) or all(tabuleiro[k][i] == j for k in range(3)):
+            return True
+    return (tabuleiro[0][0] == tabuleiro[1][1] == tabuleiro[2][2] == j or
+            tabuleiro[0][2] == tabuleiro[1][1] == tabuleiro[2][0] == j)
+
+def empate():
+    return all(v is not None for l in tabuleiro for v in l)
+
+def reiniciar():
+    global tabuleiro, jogador, acabou, msg
+    tabuleiro = [[None]*3 for _ in range(3)]
+    jogador = "X"
+    acabou = False
+    msg = ""
+
+def mudar_estado(novo):
+    global estado
+    pygame.time.wait(150)
+    estado = novo
+    if novo == JOGO: reiniciar()
+
+# === LOOP PRINCIPAL ===
+clock = pygame.time.Clock()
+glitch_timer = 0
+
+while True:
+    pos = pygame.mouse.get_pos()
+
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            pygame.quit(); sys.exit()
+        if e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
+            if estado == JOGO: mudar_estado(MENU)
+            else: pygame.quit(); sys.exit()
+        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            if som_clique: som_clique.play()
+            if estado == MENU:
+                for b in botoes:
+                    if b["rect"].collidepoint(pos):
+                        b["acao"]()
+            elif estado == JOGO:
+                ox, oy = LARGURA//2-150, ALTURA//2-200
+                btn_voltar = pygame.Rect(ox+60, oy+340, 180, 60)
+                if btn_voltar.collidepoint(pos):
+                    mudar_estado(MENU)
+                elif not acabou and oy <= pos[1] <= oy+300 and ox <= pos[0] <= ox+300:
+                    c = (pos[0] - ox) // 100
+                    l = (pos[1] - oy) // 100
+                    if 0 <= l < 3 and 0 <= c < 3 and tabuleiro[l][c] is None:
+                        tabuleiro[l][c] = jogador
+                        if vitoria(jogador):
+                            msg = f"{jogador} VENCE!"
+                            acabou = True
+                        elif empate():
+                            msg = "EMPATE!"
+                            acabou = True
+                        else:
+                            jogador = "O" if jogador == "X" else "X"
+
+    # === DESENHO ===
+    TELA.fill((8, 0, 5))
+
+    # Cartuchos 3D (agora vermelhos perfeitos)
+    for c in cartuchos:
+        c.update()
+        c.draw(TELA)
+
+    # Chão
+    pygame.draw.rect(TELA, (18, 8, 12), (0, CHAO_Y, LARGURA, ALTURA - CHAO_Y))
+
+    # CRT Scanlines
+    TELA.blit(scanlines, (0, 0))
+
+    if estado == MENU:
+        # Glitch título
+        if time.time() - glitch_timer > 0.07:
+            glitch = random.randint(-16,16) if random.random() < 0.35 else 0
+            glitch_timer = time.time()
+        titulo = FONTE_TITULO.render("JOGO DO GALO", True, (255,255,255))
+        titulo2 = FONTE_TITULO.render("JOGO DO GALO", True, (220,20,20))
+        tx = LARGURA//2 - titulo.get_width()//2 + glitch
+        ty = ALTURA//2 - 240
+        TELA.blit(titulo2, (tx + random.randint(-4,4), ty + random.randint(-4,4)))
+        TELA.blit(titulo, (tx, ty))
+
+        sub1 = FONTE_SUB.render("UM JOGO DE COMPUTADOR", True, (180,180,180))
+        sub2 = FONTE_SUB.render("POR ANALI", True, (180,180,180))
+        TELA.blit(sub1, (LARGURA//2 - sub1.get_width()//2, ty + 165))
+        TELA.blit(sub2, (LARGURA//2 - sub2.get_width()//2, ty + 205))
+
+        # Botões
+        for b in botoes:
+            hover = b["rect"].collidepoint(pos)
+            cor = (255,50,50) if hover else (220,220,220)
+            tremor = random.randint(-2,2) if hover else 0
+            txt = FONTE_MENU.render(b["txt"], True, cor)
+            r = b["rect"].copy()
+            r.x += tremor; r.y += tremor
+            TELA.blit(txt, (r.centerx - txt.get_width()//2, r.centery - txt.get_height()//2))
+
+        ver = FONTE_SUB.render("v1.0 BUCKSHOT EDITION", True, (90,90,90))
+        TELA.blit(ver, (30, ALTURA - 60))
+
+    elif estado == JOGO:
+        ox, oy = LARGURA//2-150, ALTURA//2-200
+        pygame.draw.rect(TELA, (60,60,60), (ox-40, oy-90, 380, 480), border_radius=20)
+        for i in range(1,3):
+            pygame.draw.line(TELA, (200,200,200), (ox+i*100, oy), (ox+i*100, oy+300), 8)
+            pygame.draw.line(TELA, (200,200,200), (ox, oy+i*100), (ox+300, oy+i*100), 8)
+
+        fonte_xo = pygame.font.SysFont("couriernew", 105, bold=True)
+        for l in range(3):
+            for c in range(3):
+                v = tabuleiro[l][c]
+                if v:
+                    cor = (230,30,30) if v == "X" else (230,230,230)
+                    txt = fonte_xo.render(v, True, cor)
+                    TELA.blit(txt, (ox + c*100 + 5, oy + l*100 - 8))
+
+        btn = pygame.Rect(ox+60, oy+340, 180, 60)
+        hover = btn.collidepoint(pos)
+        pygame.draw.rect(TELA, (220,30,30) if hover else (60,60,60), btn, border_radius=14)
+        txt = FONTE_MENU.render("VOLTAR", True, (230,230,230))
+        TELA.blit(txt, (btn.centerx - txt.get_width()//2, btn.centery - txt.get_height()//2))
+
+        texto = msg or f"VEZ: {jogador}"
+        cor = (220,30,30) if msg else (230,230,230)
+        msg_s = FONTE_MENU.render(texto, True, cor)
+        TELA.blit(msg_s, (LARGURA//2 - msg_s.get_width()//2, oy - 120))
+
+    # Cursor personalizado
+    pygame.draw.circle(TELA, (255,255,255), pos, 10)
+    pygame.draw.circle(TELA, (0,0,0), pos, 10, 2)
+
+    pygame.display.flip()
+    clock.tick(60)
