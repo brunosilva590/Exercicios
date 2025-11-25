@@ -1,0 +1,372 @@
+import pygame
+import sys
+
+# Inicializa o Pygame
+pygame.init()
+
+# Configurações da tela
+LARGURA = 800
+ALTURA = 600
+WORLD_WIDTH = 4200
+GROUND_Y = 550
+tela = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption("Super Mario Básico - Detecção de Chão PERFEITA")
+
+# Cores
+PRETO = (0, 0, 0)
+AZUL = (135, 206, 235)
+VERDE = (34, 139, 34)
+MARROM = (139, 69, 19)
+VERMELHO = (255, 0, 0)
+BEGE = (255, 220, 177)
+AZUL_MARIO = (0, 0, 255)
+MARROM_ESCURO = (101, 67, 33)
+CINZA_ESCURO = (0, 0, 139)
+DOURADO = (218, 165, 32)
+
+# Fontes
+qfont = pygame.font.SysFont(None, 32)
+vfont = pygame.font.SysFont(None, 100)
+
+# Relógio
+relogio = pygame.time.Clock()
+
+class Camera:
+    def __init__(self):
+        self.x = 0
+
+    def update(self, target_x):
+        self.x = target_x - LARGURA // 2
+        self.x = max(0, min(self.x, WORLD_WIDTH - LARGURA))
+
+class Solid:
+    def __init__(self, world_x, y, w, h):
+        self.world_x = float(world_x)
+        self.y = float(y)
+        self.w = float(w)
+        self.h = float(h)
+        self.active = True
+
+    def collides(self, other_x, other_y, other_w, other_h):
+        return (other_x < self.world_x + self.w and
+                other_x + other_w > self.world_x and
+                other_y < self.y + self.h and
+                other_y + other_h > self.y)
+
+    def desenhar(self, tela, camera_x, cor):
+        if not self.active:
+            return
+        adj_x = self.world_x - camera_x
+        pygame.draw.rect(tela, cor, (adj_x, self.y, self.w, self.h))
+
+class Plataforma(Solid):
+    def desenhar(self, tela, camera_x):
+        super().desenhar(tela, camera_x, MARROM)
+
+class Brick(Solid):
+    def __init__(self, world_x, y, w=40, h=40):
+        super().__init__(world_x, y, w, h)
+
+    def desenhar(self, tela, camera_x):
+        super().desenhar(tela, camera_x, DOURADO)
+        if not self.active:
+            return
+        adj_x = self.world_x - camera_x
+        texto = qfont.render('?', True, PRETO)
+        tela.blit(texto, (adj_x + 12, self.y + 8))
+
+class Mario:
+    def __init__(self, world_x, y):
+        self.world_x = float(world_x)
+        self.y = float(y)
+        self.largura = 40.0
+        self.altura = 50.0
+        self.vel_x = 0.0
+        self.vel_y = 0.0
+        self.pulo_forca = -16.0
+        self.gravidade = 0.9
+        self.no_chao = False
+        self.vel_max_x = 6.0
+        self.vel_max_y = 12.0
+
+    def update(self, solids):
+        # Movimento horizontal PRIMEIRO
+        self.world_x += self.vel_x
+        
+        # Colisão horizontal
+        for solid in solids:
+            if not solid.active:
+                continue
+            if solid.collides(self.world_x, self.y, self.largura, self.altura):
+                if self.vel_x > 0:
+                    self.world_x = solid.world_x - self.largura
+                elif self.vel_x < 0:
+                    self.world_x = solid.world_x + solid.w
+                break  # Resolve uma colisão por vez
+
+        # Gravidade e movimento vertical
+        self.vel_y += self.gravidade
+        if self.vel_y > self.vel_max_y:
+            self.vel_y = self.vel_max_y
+            
+        self.y += self.vel_y
+        self.no_chao = False
+
+        # Colisão vertical
+        for solid in solids:
+            if not solid.active:
+                continue
+            if solid.collides(self.world_x, self.y, self.largura, self.altura):
+                if self.vel_y > 0:  # Caindo - pousar em cima
+                    self.y = solid.y - self.altura
+                    self.vel_y = 0.0
+                    self.no_chao = True
+                elif self.vel_y < 0:  # Subindo - bater por baixo
+                    self.y = solid.y + solid.h
+                    self.vel_y = 0.0
+                    if isinstance(solid, Brick):
+                        solid.active = False
+                break  # Resolve uma colisão por vez
+
+        # Limites mundo
+        if self.world_x < 0:
+            self.world_x = 0
+        if self.world_x > WORLD_WIDTH - self.largura:
+            self.world_x = WORLD_WIDTH - self.largura
+
+    def pular(self):
+        if self.no_chao:
+            self.vel_y = self.pulo_forca
+            self.no_chao = False
+
+    def desenhar(self, tela, camera_x):
+        adj_x = self.world_x - camera_x
+        # Cabeça
+        pygame.draw.rect(tela, BEGE, (adj_x + 8, self.y, 24, 20))
+        # Boné
+        pygame.draw.rect(tela, VERMELHO, (adj_x + 10, self.y, 20, 10))
+        # Cabelo
+        pygame.draw.rect(tela, MARROM_ESCURO, (adj_x + 12, self.y + 3, 16, 8))
+        # Corpo
+        pygame.draw.rect(tela, AZUL_MARIO, (adj_x + 10, self.y + 20, 20, 20))
+        # Botões
+        pygame.draw.circle(tela, VERMELHO, (int(adj_x + 15), int(self.y + 25)), 3)
+        pygame.draw.circle(tela, VERMELHO, (int(adj_x + 25), int(self.y + 25)), 3)
+        pygame.draw.circle(tela, VERMELHO, (int(adj_x + 20), int(self.y + 35)), 3)
+        # Pernas
+        pygame.draw.rect(tela, MARROM, (adj_x + 10, self.y + 40, 8, 10))
+        pygame.draw.rect(tela, MARROM, (adj_x + 22, self.y + 40, 8, 10))
+        # Sapatos
+        pygame.draw.rect(tela, CINZA_ESCURO, (adj_x + 10, self.y + 45, 8, 5))
+        pygame.draw.rect(tela, CINZA_ESCURO, (adj_x + 22, self.y + 45, 8, 5))
+        # Braços
+        pygame.draw.rect(tela, BEGE, (adj_x, self.y + 22, 8, 12))
+        pygame.draw.rect(tela, BEGE, (adj_x + 32, self.y + 22, 8, 12))
+
+class Goomba:
+    def __init__(self, world_x, y):
+        self.world_x = float(world_x)
+        self.y = float(y)
+        self.largura = 32.0
+        self.altura = 28.0
+        self.vel_x = -2.5
+        self.vel_y = 0.0
+        self.gravidade = 0.9
+        self.morto = False
+
+    def update(self, solids):
+        if self.morto:
+            return
+        # Horizontal
+        self.world_x += self.vel_x
+        for solid in solids:
+            if not solid.active:
+                continue
+            if solid.collides(self.world_x, self.y, self.largura, self.altura):
+                self.vel_x *= -1
+                break
+        # Vertical
+        self.vel_y += self.gravidade
+        self.y += self.vel_y
+        for solid in solids:
+            if not solid.active:
+                continue
+            if solid.collides(self.world_x, self.y, self.largura, self.altura):
+                if self.vel_y > 0:
+                    self.y = solid.y - self.altura
+                    self.vel_y = 0.0
+                break
+
+    def desenhar(self, tela, camera_x):
+        if self.morto:
+            return
+        adj_x = self.world_x - camera_x
+        # Corpo
+        pygame.draw.ellipse(tela, MARROM_ESCURO, (adj_x, self.y, 32, 25))
+        # Olhos
+        pygame.draw.circle(tela, PRETO, (int(adj_x + 8), int(self.y + 8)), 3)
+        pygame.draw.circle(tela, PRETO, (int(adj_x + 24), int(self.y + 8)), 3)
+        pygame.draw.circle(tela, (255,255,255), (int(adj_x + 10), int(self.y + 10)), 4)
+        pygame.draw.circle(tela, (255,255,255), (int(adj_x + 22), int(self.y + 10)), 4)
+        # Pernas
+        pygame.draw.rect(tela, (92, 51, 23), (adj_x + 6, self.y + 20, 8, 8))
+        pygame.draw.rect(tela, (92, 51, 23), (adj_x + 18, self.y + 20, 8, 8))
+
+class Bandeira:
+    def __init__(self, world_x):
+        self.world_x = float(world_x)
+        self.y = 350.0
+        self.pole_h = 200.0
+        self.pole_w = 10.0
+
+    def collides_pole(self, other_x, other_y, other_w, other_h):
+        pole_left = self.world_x - 5.0
+        pole_right = self.world_x + 5.0
+        pole_top = self.y
+        pole_bottom = self.y + self.pole_h
+        return (other_x < pole_right and other_x + other_w > pole_left and
+                other_y < pole_bottom and other_y + other_h > pole_top)
+
+    def desenhar(self, tela, camera_x):
+        adj_x = self.world_x - camera_x
+        # Poste
+        pygame.draw.rect(tela, MARROM_ESCURO, (adj_x - 5, self.y, 10, self.pole_h))
+        # Topo
+        pygame.draw.circle(tela, VERMELHO, (int(adj_x), int(self.y - 5)), 8)
+        # Bandeira
+        points = [(adj_x + 50, self.y + 50), (adj_x + 50, self.y + 80), (adj_x + 10, self.y + 65)]
+        pygame.draw.polygon(tela, VERMELHO, points)
+
+# Mapa
+platforms = [
+    Plataforma(0, GROUND_Y, 400, 50),
+    Plataforma(480, GROUND_Y, 200, 50),
+    Plataforma(780, GROUND_Y, 150, 50),
+    Plataforma(1020, GROUND_Y, 250, 50),
+    Plataforma(1400, GROUND_Y, 100, 50),
+    Plataforma(1620, GROUND_Y, 300, 50),
+    Plataforma(2050, GROUND_Y, 200, 50),
+    Plataforma(2350, GROUND_Y, 150, 50),
+    Plataforma(2650, GROUND_Y, 400, 50),
+    Plataforma(3250, GROUND_Y, 200, 50),
+    Plataforma(3550, GROUND_Y, 500, 50),
+    # Plataformas para pular
+    Plataforma(250, 450, 100, 20),
+    Plataforma(650, 450, 80, 20),
+    Plataforma(1300, 400, 100, 20),
+    Plataforma(1750, 450, 120, 20),
+    Plataforma(2950, 450, 100, 20),
+]
+
+brick_positions = [
+    (150, 420), (520, 420), (820, 370), (1100, 420),
+    (1420, 370), (1680, 420), (2100, 420), (2400, 370),
+    (2750, 420), (3300, 420)
+]
+
+goomba_positions = [
+    (500, 520), (800, 520), (1100, 520), (1500, 520),
+    (1700, 520), (2000, 520), (2400, 520), (2700, 520),
+    (3400, 520), (3650, 520)
+]
+
+def restart_level():
+    global mario, bricks, goombas, camera
+    mario = Mario(50, 499.0)  # Ligeiramente acima para teste perfeito
+    bricks = [Brick(x, y) for x, y in brick_positions]
+    goombas = [Goomba(x, y) for x, y in goomba_positions]
+    camera = Camera()
+
+# Instâncias iniciais
+restart_level()
+flag = Bandeira(4150)
+vitoria_mostrada = False
+
+# Loop principal
+rodando = True
+while rodando:
+    for evento in pygame.event.get():
+        if evento.type == pygame.QUIT:
+            rodando = False
+        if evento.type == pygame.KEYDOWN:
+            if evento.key == pygame.K_SPACE:
+                mario.pular()
+            if evento.key == pygame.K_ESCAPE:
+                rodando = False
+
+    # Controles
+    teclas = pygame.key.get_pressed()
+    mario.vel_x = 0.0
+    if teclas[pygame.K_LEFT] or teclas[pygame.K_a]:
+        mario.vel_x = -mario.vel_max_x
+    if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]:
+        mario.vel_x = mario.vel_max_x
+
+    # Atualizações
+    camera.update(mario.world_x)
+    solids = platforms + bricks
+    mario.update(solids)
+
+    # Morte por buraco
+    if mario.y > ALTURA - 20:
+        restart_level()
+        continue
+
+    # Colisões com Goombas
+    for g in goombas:
+        if g.morto:
+            continue
+        # Colisão manual float precisa
+        if (mario.world_x < g.world_x + g.largura and
+            mario.world_x + mario.largura > g.world_x and
+            mario.y < g.y + g.altura and
+            mario.y + mario.altura > g.y):
+            if mario.vel_y > 8 and mario.y + mario.altura <= g.y + 20:
+                # Esmagou o Goomba
+                g.morto = True
+                mario.vel_y = -14.0
+            else:
+                # Morreu
+                restart_level()
+                break
+
+    # Atualizar Goombas
+    for g in goombas:
+        g.update(solids)
+
+    # Bandeira - Vitória
+    if flag.collides_pole(mario.world_x, mario.y, mario.largura, mario.altura):
+        tela.fill(AZUL)
+        texto = vfont.render("VOCÊ VENCEU!", True, VERDE)
+        tr = texto.get_rect(center=(LARGURA//2, ALTURA//2 - 50))
+        tela.blit(texto, tr)
+        texto_small = qfont.render("Parabéns! Pressione ESC para sair.", True, PRETO)
+        tr_small = texto_small.get_rect(center=(LARGURA//2, ALTURA//2 + 50))
+        tela.blit(texto_small, tr_small)
+        pygame.display.flip()
+        pygame.time.wait(4000)
+        rodando = False
+        continue
+
+    # Desenhar
+    tela.fill(AZUL)
+
+    # Desenhar sólidos
+    for solid in solids:
+        solid.desenhar(tela, camera.x)
+
+    # Desenhar Goombas
+    for g in goombas:
+        g.desenhar(tela, camera.x)
+
+    # Desenhar Bandeira
+    flag.desenhar(tela, camera.x)
+
+    # Desenhar Mario
+    mario.desenhar(tela, camera.x)
+
+    pygame.display.flip()
+    relogio.tick(60)
+
+pygame.quit()
+sys.exit()
