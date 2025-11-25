@@ -1,0 +1,267 @@
+import pygame
+import random
+import sys
+
+pygame.init()
+
+LARGURA = 600
+ALTURA = 600
+CELL = 20
+GRID_W = LARGURA // CELL
+GRID_H = ALTURA // CELL
+FPS = 60
+
+tela = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption('Cobrinha ÉPICA - Máx 2 Inimigos!')
+clock = pygame.time.Clock()
+
+# Cores
+PRETO = (0, 0, 0)
+AZUL = (0, 10, 50)
+VERDE = (0, 255, 0)
+VERMELHO = (255, 0, 0)
+AMARELO = (255, 255, 0)
+CIANO = (0, 255, 255)
+LARANJA = (255, 165, 0)
+ROXO = (200, 0, 255)
+BRANCO = (255, 255, 255)
+
+# Direções
+UP = (0, -1)
+DOWN = (0, 1)
+LEFT = (-1, 0)
+RIGHT = (1, 0)
+
+def pos_valida(x, y):
+    return 0 <= x < GRID_W and 0 <= y < GRID_H
+
+def gerar_posicao_livre(cobra, inimigos, powerups, comida):
+    while True:
+        x = random.randint(0, GRID_W-1)
+        y = random.randint(0, GRID_H-1)
+        p = (x, y)
+        if (p not in cobra and 
+            p != comida and 
+            all(p != e['pos'] for e in inimigos) and 
+            all(p != pw['pos'] for pw in powerups)):
+            return p
+
+def desenhar(cobra, comida, inimigos, powerups, tiros):
+    tela.fill(AZUL)
+    
+    # cobra
+    for i, (x, y) in enumerate(cobra):
+        cor = (0, 220, 0) if i == 0 else VERDE
+        pygame.draw.rect(tela, cor, (x*CELL, y*CELL, CELL, CELL))
+        pygame.draw.rect(tela, (0, 150, 0), (x*CELL, y*CELL, CELL, CELL), 2)
+    
+    # comida
+    pygame.draw.rect(tela, VERMELHO, (comida[0]*CELL, comida[1]*CELL, CELL, CELL))
+    pygame.draw.rect(tela, (180, 0, 0), (comida[0]*CELL, comida[1]*CELL, CELL, CELL), 3)
+    
+    # inimigos
+    for e in inimigos:
+        pygame.draw.rect(tela, (180, 0, 0), (e['pos'][0]*CELL, e['pos'][1]*CELL, CELL, CELL))
+        pygame.draw.rect(tela, (120, 0, 0), (e['pos'][0]*CELL, e['pos'][1]*CELL, CELL, CELL), 3)
+    
+    # powerups
+    cores_pw = {'freeze': CIANO, 'speed': AMARELO, 'shot': LARANJA, 'intimidate': ROXO}
+    for pw in powerups:
+        pygame.draw.rect(tela, cores_pw[pw['type']], (pw['pos'][0]*CELL, pw['pos'][1]*CELL, CELL, CELL))
+        pygame.draw.rect(tela, PRETO, (pw['pos'][0]*CELL, pw['pos'][1]*CELL, CELL, CELL), 2)
+    
+    # tiros
+    for t in tiros:
+        cx = int(t[0]*CELL + CELL//2)
+        cy = int(t[1]*CELL + CELL//2)
+        pygame.draw.circle(tela, BRANCO, (cx, cy), 7)
+
+def mostrar_texto(pontos, tiros_carga, num_inimigos, speed_timer, freeze_timer, intimidar_timer):
+    fonte = pygame.font.SysFont('consolas', 20, bold=True)
+    textos = [
+        f"Pontos: {pontos}",
+        f"Inimigos: {num_inimigos}",
+        f"Tiros: {tiros_carga}",
+    ]
+    if speed_timer > 0: textos.append("SPEED!")
+    if freeze_timer > 0: textos.append("FREEZE!")
+    if intimidar_timer > 0: textos.append("INTIMIDATE!")
+    
+    for i, txt in enumerate(textos):
+        s = fonte.render(txt, True, BRANCO)
+        tela.blit(s, (10, 10 + i*28))
+
+# ====================== VARIÁVEIS DO JOGO ======================
+cobra = [(GRID_W//2, GRID_H//2)]
+direcao = RIGHT
+comida = gerar_posicao_livre(cobra, [], [], None)
+pontos = 0
+
+inimigos = []
+powerups = []
+tiros = []
+tiros_carga = 0
+
+# timers (em frames @60fps)
+speed_timer = 0
+freeze_timer = 0
+intimidar_timer = 0
+enemy_spawn_block = 0
+powerup_cooldown = 0
+
+player_move_timer = 0
+enemy_move_timer = 0
+
+# ====================== LOOP PRINCIPAL ======================
+while True:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+            
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_UP and direcao != DOWN: direcao = UP
+            if event.key == pygame.K_DOWN and direcao != UP: direcao = DOWN
+            if event.key == pygame.K_LEFT and direcao != RIGHT: direcao = LEFT
+            if event.key == pygame.K_RIGHT and direcao != LEFT: direcao = RIGHT
+            
+            if event.key == pygame.K_SPACE and tiros_carga > 0:
+                tiros.append([cobra[0][0], cobra[0][1], direcao[0], direcao[1]])
+                tiros_carga -= 1
+
+    # === CONTADORES ===
+    speed_timer = max(0, speed_timer - 1)
+    freeze_timer = max(0, freeze_timer - 1)
+    intimidar_timer = max(0, intimidar_timer - 1)
+    enemy_spawn_block = max(0, enemy_spawn_block - 1)
+    powerup_cooldown = max(0, powerup_cooldown - 1)
+
+    # === MOVIMENTO DO JOGADOR ===
+    velocidade = 4 if speed_timer > 0 else 8
+    player_move_timer += 1
+    if player_move_timer >= velocidade:
+        player_move_timer = 0
+        
+        nova_cabeca = (cobra[0][0] + direcao[0], cobra[0][1] + direcao[1])
+        
+        # colisão com parede, corpo ou inimigo
+        if (not pos_valida(*nova_cabeca) or 
+            nova_cabeca in cobra or 
+            any(nova_cabeca == e['pos'] for e in inimigos)):
+            break
+            
+        cobra.insert(0, nova_cabeca)
+        
+        # comer comida
+        comeu = False
+        if nova_cabeca == comida:
+            pontos += 1
+            comida = gerar_posicao_livre(cobra, inimigos, powerups, None)
+            comeu = True
+        
+        # power-up pego
+        for pw in powerups[:]:
+            if pw['pos'] == nova_cabeca:
+                if pw['type'] == 'freeze':
+                    freeze_timer = 240  # 4s
+                elif pw['type'] == 'speed':
+                    speed_timer = 300  # 5s
+                elif pw['type'] == 'shot':
+                    tiros_carga += 3
+                elif pw['type'] == 'intimidate':
+                    intimidar_timer = 600  # 10s
+                powerups.remove(pw)
+                break
+        
+        if not comeu:
+            cobra.pop()
+
+    # === SPAWN INIMIGOS (MÁXIMO 2 SEMPRE!) ===
+    if pontos >= 5 and enemy_spawn_block == 0 and len(inimigos) < 2:
+        inimigos.append({'pos': gerar_posicao_livre(cobra, inimigos, powerups, comida)})
+        enemy_spawn_block = 180  # ~3s
+
+    # === SPAWN POWER-UPS (a cada 12s) ===
+    if powerup_cooldown == 0:
+        tipos = ['freeze', 'speed', 'shot', 'intimidate']
+        powerups.append({
+            'pos': gerar_posicao_livre(cobra, inimigos, powerups, comida),
+            'type': random.choice(tipos)
+        })
+        powerup_cooldown = 720  # 12s
+
+    # === MOVIMENTO DOS INIMIGOS ===
+    if freeze_timer == 0:
+        nivel = max(0, (pontos - 4) // 7)
+        velocidade_inimigo = max(3, 12 - nivel * 2)
+        
+        enemy_move_timer += 1
+        if enemy_move_timer >= velocidade_inimigo:
+            enemy_move_timer = 0
+            for e in inimigos:
+                px, py = cobra[0]
+                ex, ey = e['pos']
+                
+                # IA: Manhattan distance para perseguir/fugir
+                dirs = [UP, DOWN, LEFT, RIGHT]
+                melhor_dir = RIGHT
+                menor_dist = float('inf')
+                
+                for d in dirs:
+                    nx = ex + d[0]
+                    ny = ey + d[1]
+                    if pos_valida(nx, ny):
+                        dist = abs(nx - px) + abs(ny - py)
+                        if intimidar_timer > 0:
+                            # FOGE: escolhe MAIOR distância
+                            if dist > menor_dist:
+                                menor_dist = dist
+                                melhor_dir = d
+                        else:
+                            # PERSEGUE: escolhe MENOR distância
+                            if dist < menor_dist:
+                                menor_dist = dist
+                                melhor_dir = d
+                
+                e['pos'] = (ex + melhor_dir[0], ey + melhor_dir[1])
+
+    # === MOVIMENTO DOS TIROS ===
+    for t in tiros[:]:
+        t[0] += t[2]
+        t[1] += t[3]
+        if not pos_valida(int(t[0]), int(t[1])):
+            tiros.remove(t)
+            continue
+        for e in inimigos[:]:
+            if (int(t[0]), int(t[1])) == e['pos']:
+                inimigos.remove(e)
+                enemy_spawn_block = 1800  # 30s sem spawn!
+                tiros.remove(t)
+                break
+
+    # === COLISÃO FINAL: INIMIGO TOCOU CORPO DA COBRA ===
+    game_over = False
+    for e in inimigos:
+        if e['pos'] in cobra:
+            game_over = True
+            break
+
+    if not game_over:
+        desenhar(cobra, comida, inimigos, powerups, tiros)
+        mostrar_texto(pontos, tiros_carga, len(inimigos), speed_timer, freeze_timer, intimidar_timer)
+        pygame.display.update()
+        clock.tick(FPS)
+        continue
+    
+    break  # GAME OVER
+
+# ====================== GAME OVER ======================
+tela.fill(PRETO)
+fonte = pygame.font.SysFont('arial', 70, bold=True)
+texto = fonte.render('GAME OVER', True, VERMELHO)
+texto2 = pygame.font.SysFont('arial', 40).render(f'Pontos: {pontos}', True, BRANCO)
+tela.blit(texto, (LARGURA//2 - texto.get_width()//2, 200))
+tela.blit(texto2, (LARGURA//2 - texto2.get_width()//2, 300))
+pygame.display.update()
+pygame.time.wait(4000)
+pygame.quit()
